@@ -1,25 +1,54 @@
 // background.js (MV3, module)
-// Offloads benchmarking to an offscreen doc, reloads tabs here, supports schedule + Run now.
-// Requires permissions: ["storage","browsingData","alarms","tabs","offscreen"]
+// Blocks YouTube during a nightly window with declarativeNetRequest, and reloads
+// only the tabs matching your regex. No DNS flush, no socket closing, and no
+// --enable-net-benchmarking: the block happens inside Chrome's network stack, so
+// cached DNS entries and already-open sockets are irrelevant.
+//
+// Requires permissions: ["storage","alarms","tabs","declarativeNetRequest"]
 
 // ---------- Config ----------
-const DEFAULTS = { time: "00:00", pattern: "youtube\\.com", flags: "i" };
-const ALARM = "scheduledFlush";
-const OFFSCREEN_URL = "offscreen.html"; // bundled with your extension
+const DEFAULTS = {
+  startTime: "22:00", // block turns on
+  endTime: "06:00",   // block turns off
+  pattern: "youtube\\.com",
+  flags: "i",
+};
 
-// Single-flight guard so flushes never overlap
+const RULESET = "block";      // must match the id in manifest.json
+const ALARM_ON = "blockOn";
+const ALARM_OFF = "blockOff";
+const ALARM_TICK = "reconcile";
+const TICK_MINUTES = 5;
+
+// Single-flight guard so runs never overlap
 let inflight = null;
 
 // ---------- Helpers ----------
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
 async function getCfg() {
-  const s = await chrome.storage.local.get(DEFAULTS);
+  const s = await chrome.storage.local.get([
+    "startTime", "endTime", "pattern", "flags", "time",
+  ]);
   return {
-    time: s.time || DEFAULTS.time,
+    // `time` was the pre-2.0 key for the start of the window
+    startTime: s.startTime || s.time || DEFAULTS.startTime,
+    endTime: s.endTime || DEFAULTS.endTime,
     pattern: s.pattern || DEFAULTS.pattern,
     flags: s.flags || DEFAULTS.flags,
   };
+}
+
+const toMinutes = (t) => {
+  const [hh, mm] = String(t).split(":").map(Number);
+  return ((hh || 0) % 24) * 60 + ((mm || 0) % 60);
+};
+
+// Handles windows that wrap past midnight, e.g. 22:00 -> 06:00
+function inWindow(startTime, endTime, now = new Date()) {
+  const cur = now.getHours() * 60 + now.getMinutes();
+  const s = toMinutes(startTime);
+  const e = toMinutes(endTime);
+  if (s === e) return false; // zero-length window: never block
+  return s < e ? (cur >= s && cur < e) : (cur >= s || cur < e);
 }
 
 function nextAt(timeStr) {
@@ -31,10 +60,16 @@ function nextAt(timeStr) {
   return +d;
 }
 
-async function schedule() {
-  const { time } = await getCfg();
-  await chrome.alarms.clear(ALARM);
-  chrome.alarms.create(ALARM, { when: nextAt(time) });
+// ---------- Blocking ----------
+// Returns true if this call actually changed the state.
+async function setBlocking(on) {
+  const enabled = await chrome.declarativeNetRequest.getEnabledRulesets();
+  const isOn = enabled.includes(RULESET);
+  if (isOn === on) return false;
+  await chrome.declarativeNetRequest.updateEnabledRulesets(
+    on ? { enableRulesetIds: [RULESET] } : { disableRulesetIds: [RULESET] }
+  );
+  return true;
 }
 
 async function reloadMatchingTabs(pattern, flags) {
@@ -51,56 +86,41 @@ async function reloadMatchingTabs(pattern, flags) {
   return n;
 }
 
-// ---------- Offscreen plumbing ----------
-async function ensureOffscreen() {
-  const exists = await chrome.offscreen.hasDocument?.();
-  if (!exists) {
-    await chrome.offscreen.createDocument({
-      url: OFFSCREEN_URL,
-      reasons: ["IFRAME_SCRIPTING"],
-      justification: "Isolate benchmarking API calls to avoid SW/options crash",
-    });
-  }
-}
-
-async function runFlushViaOffscreen() {
-  // The offscreen page runs ONLY benchmarking calls (DNS clear + closeConnections),
-  // then replies with a result object. It does NOT touch chrome.tabs.
-  await ensureOffscreen();
-
-  // We call it; it responds with { ok, usedBenchmarking, steps[], error? }
-  const res = await chrome.runtime.sendMessage({ type: "offscreenFlush" })
-    .catch(() => ({ ok: false, error: "offscreen messaging failed" }));
-
-  // Close the offscreen doc as soon as we're done
-  try { await chrome.offscreen.closeDocument(); } catch {}
-  return res;
-}
-
 // ---------- Orchestrator (single entry point) ----------
-async function flushAndReload(pattern, flags) {
+// force: block regardless of the schedule (used by "Run now")
+async function enforce({ force = false } = {}) {
   if (inflight) return inflight; // coalesce concurrent calls
 
   inflight = (async () => {
-    // 1) Do the benchmarking-only flush in offscreen (may be no-op if flag missing)
-    const benchRes = await runFlushViaOffscreen();
+    const cfg = await getCfg();
+    const shouldBlock = force || inWindow(cfg.startTime, cfg.endTime);
+    const changed = await setBlocking(shouldBlock);
 
-    // 2) Give Chrome a breath, then reload matching tabs here
-    await sleep(150);
-    const reloaded = await reloadMatchingTabs(pattern, flags);
+    // Only disturb tabs on the transition into the window (or a manual run).
+    // Reloading a YouTube tab while the ruleset is live lands it on Chrome's
+    // block page, which discards whatever was already buffered. Without this
+    // the tab would keep playing until the buffer drained.
+    let reloaded = 0;
+    if (shouldBlock && (changed || force)) {
+      reloaded = await reloadMatchingTabs(cfg.pattern, cfg.flags);
+    }
 
-    const combined = {
-      ...benchRes,
-      ok: benchRes?.ok !== false,
+    const result = {
+      ok: true,
+      blocking: shouldBlock,
+      changed,
       reloaded,
-      steps: [...(benchRes?.steps || []), `Reloaded ${reloaded} tab(s)`],
+      window: `${cfg.startTime}-${cfg.endTime}`,
+      steps: [
+        shouldBlock ? "Blocking ruleset enabled" : "Blocking ruleset disabled",
+        `Reloaded ${reloaded} tab(s)`,
+      ],
       at: new Date().toISOString(),
     };
 
-    // Persist last result for Options page / debugging
-    await chrome.storage.local.set({ lastFlush: combined });
-
-    return combined;
+    // Persist last result for the Options page / debugging
+    await chrome.storage.local.set({ lastFlush: result });
+    return result;
   })();
 
   try {
@@ -110,50 +130,55 @@ async function flushAndReload(pattern, flags) {
   }
 }
 
-// ---------- Lifecycle ----------
-chrome.runtime.onInstalled.addListener(schedule);
-chrome.runtime.onStartup?.addListener(async () => {
-  // Make sure an alarm exists even if SW cold-starts
+// ---------- Scheduling ----------
+async function schedule() {
+  const { startTime, endTime } = await getCfg();
+  await chrome.alarms.clear(ALARM_ON);
+  await chrome.alarms.clear(ALARM_OFF);
+  chrome.alarms.create(ALARM_ON, { when: nextAt(startTime) });
+  chrome.alarms.create(ALARM_OFF, { when: nextAt(endTime) });
+  // Safety net: if the machine was asleep across a boundary or an alarm was
+  // missed, this puts the state right within TICK_MINUTES.
+  chrome.alarms.create(ALARM_TICK, { periodInMinutes: TICK_MINUTES });
+}
+
+async function init() {
   await schedule();
-});
+  await enforce();
+}
+
+// ---------- Lifecycle ----------
+chrome.runtime.onInstalled.addListener(init);
+chrome.runtime.onStartup?.addListener(init);
 
 // React to settings changes
 chrome.storage.onChanged.addListener((chg, area) => {
-  if (area === "local" && (chg.time || chg.pattern || chg.flags)) {
-    schedule().catch(()=>{});
+  if (area !== "local") return;
+  if (chg.startTime || chg.endTime || chg.pattern || chg.flags || chg.time) {
+    schedule().then(() => enforce()).catch(() => {});
   }
 });
 
-// Alarm fires: run flush + reload, then reschedule next day
 chrome.alarms.onAlarm.addListener(async (a) => {
-  if (a.name !== ALARM) return;
-  const { pattern, flags } = await getCfg();
-  await flushAndReload(pattern, flags);
-  await schedule();
+  if (a.name === ALARM_TICK) {
+    await enforce();
+    return;
+  }
+  if (a.name !== ALARM_ON && a.name !== ALARM_OFF) return;
+  await enforce();
+  await schedule(); // re-arm one-shot alarms (also keeps DST honest)
 });
 
-// Toolbar click → same path
-chrome.action.onClicked.addListener(async () => {
-  const { pattern, flags } = await getCfg();
-  const res = await flushAndReload(pattern, flags);
-  try {
-    await chrome.action.setBadgeBackgroundColor({ color: res.ok ? [0,120,215,255] : [200,0,0,255] });
-    await chrome.action.setBadgeText({ text: res.ok ? "OK" : "ERR" });
-    setTimeout(() => chrome.action.setBadgeText({ text: "" }), 1500);
-  } catch {}
-});
-
-// Options/Popup → “Run now” + “Reschedule”
+// Options/Popup -> "Run now" + "Reschedule"
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (msg?.type === "runNow") {
-    // Uses the SAME route as popup: background → offscreen → reload tabs
-    const p = msg.reloadPattern ?? DEFAULTS.pattern;
-    const f = msg.reloadFlags ?? DEFAULTS.flags;
-    flushAndReload(p, f).then((r) => sendResponse({ ok: true, result: r }));
+    // Forces the block on so you can verify it works outside the window.
+    // The reconcile tick will restore the scheduled state within TICK_MINUTES.
+    enforce({ force: true }).then((r) => sendResponse({ ok: true, result: r }));
     return true; // keep channel open for async response
   }
   if (msg?.type === "reschedule") {
-    schedule().then(() => sendResponse({ ok: true }));
+    schedule().then(() => enforce()).then(() => sendResponse({ ok: true }));
     return true;
   }
 });

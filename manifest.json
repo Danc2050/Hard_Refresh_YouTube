@@ -1,23 +1,33 @@
 {
-    "manifest_version": 3,
-    "name": "Tab Refresher (Regex + Schedule)",
-    "version": "1.0.0",
-    "description": "Reload tabs whose URL matches a regex on a daily schedule (e.g., midnight).",
-    "permissions": ["tabs", "storage", "browsingData", "alarms", "offscreen"],
-    "host_permissions": ["<all_urls>"],
-    "options_ui": {
+  "manifest_version": 3,
+  "name": "YouTube Night Block (Schedule + Regex)",
+  "version": "2.0.0",
+  "description": "Blocks YouTube during a nightly window and reloads only the matching tabs.",
+  "permissions": ["tabs", "storage", "alarms", "declarativeNetRequest"],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "block",
+        "enabled": false,
+        "path": "rules.json"
+      }
+    ]
+  },
+  "options_ui": {
     "page": "options.html",
     "open_in_tab": true
-    },
-    "background": {
-    "service_worker": "background.js", "type": "module"
-    },
-    "icons": {
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "icons": {
     "16": "icons/icon_16.png",
     "48": "icons/icon_48.png",
     "128": "icons/icon_128.png"
-    },
-    "action": {
-    "default_popup": "popup.html", "default_title": "Tab Refresher"
-    }
-    }
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "YouTube Night Block"
+  }
+}

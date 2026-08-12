@@ -1,6 +1,6 @@
 <!doctype html>
 <meta charset="utf-8" />
-<title>Flush DNS & Sockets — Options</title>
+<title>YouTube Night Block — Options</title>
 <meta http-equiv="Content-Security-Policy" content="script-src 'self'; object-src 'none'; base-uri 'none';">
 
 <style>
@@ -17,10 +17,10 @@
   small.hint { color: #666; }
 </style>
 
-<h2>Flush DNS & Close Sockets — Options</h2>
+<h2>YouTube Night Block — Options</h2>
 
 <fieldset>
-  <legend>Matching</legend>
+  <legend>Tabs to reset</legend>
   <label>
     <span>Regex pattern</span>
     <input id="pat" type="text" placeholder="youtube\.com">
@@ -29,26 +29,31 @@
     <span>Regex flags</span>
     <input id="flg" type="text" placeholder="i">
   </label>
-  <small class="hint">Tabs whose URL matches <code>new RegExp(pattern, flags)</code> will be reloaded after a flush.</small>
+  <small class="hint">When the block turns on, tabs matching <code>new RegExp(pattern, flags)</code> are reloaded onto Chrome's block page. Everything else is left alone.</small>
 </fieldset>
 
 <fieldset>
   <legend>Schedule</legend>
   <label>
-    <span>Run daily at</span>
-    <input id="time" type="time" step="60">
+    <span>Block from</span>
+    <input id="start" type="time" step="60">
+  </label>
+  <label>
+    <span>Until</span>
+    <input id="end" type="time" step="60">
   </label>
   <div class="row">
     <button id="save">Save</button>
     <span id="saveMsg" class="ok" aria-live="polite"></span>
   </div>
+  <small class="hint">Windows may wrap past midnight (e.g. 22:00 → 06:00). Blocking itself is enforced by the extension's rules, so it does not depend on DNS.</small>
 </fieldset>
 
 <fieldset>
   <legend>Manual</legend>
   <div class="row">
     <button id="runNow">Run now</button>
-    <small class="hint">Uses the same background path as the popup. Requires launching with <code>--enable-net-benchmarking</code> for full flush; otherwise falls back to reloading matching tabs.</small>
+    <small class="hint">Forces the block on so you can test it. If you are outside the scheduled window, it reverts within about 5 minutes.</small>
   </div>
 </fieldset>
 
