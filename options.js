@@ -1,68 +1,63 @@
-// Options uses the SAME background route as popup: runtime.sendMessage({type:"runNow", ...})
+// Options uses the SAME background route as popup: runtime.sendMessage({type:"runNow"})
 
-const DEFAULTS = { pattern: "youtube\\.com", flags: "i", time: "00:00", redirectUrl: "http://192.168.68.67:8080/" };
+const DEFAULTS = {
+  pattern: "youtube\\.com",
+  flags: "i",
+  startTime: "22:00",
+  endTime: "06:00",
+};
+
 const $ = (id) => document.getElementById(id);
-const pat = $("pat"), flg = $("flg"), tim = $("time"), redir = $("redir");
+const pat = $("pat"), flg = $("flg"), start = $("start"), end = $("end");
 const status = $("status"), saveMsg = $("saveMsg");
 
 function report(msg, ok = true) { status.textContent = msg; status.className = ok ? "ok" : "err"; }
 const isValidTime = (s) => /^\d{2}:\d{2}$/.test(s);
-// "" (no redirect) or an http(s) URL
-function isValidRedirect(s) {
-  if (!s) return true;
-  try { return /^https?:$/.test(new URL(s).protocol); } catch { return false; }
-}
 
 async function load() {
-  const s = await chrome.storage.local.get(DEFAULTS);
+  const s = await chrome.storage.local.get([
+    "pattern", "flags", "startTime", "endTime", "time", "lastFlush",
+  ]);
   pat.value = s.pattern || DEFAULTS.pattern;
   flg.value = s.flags || DEFAULTS.flags;
-  tim.value = isValidTime(s.time || "") ? s.time : DEFAULTS.time;
-  redir.value = s.redirectUrl ?? DEFAULTS.redirectUrl;
 
-  const { lastFlush } = await chrome.storage.local.get("lastFlush");
-  if (lastFlush) report(JSON.stringify(lastFlush, null, 2), !!lastFlush.ok);
+  // `time` was the pre-2.0 key for the start of the window
+  const st = s.startTime || s.time || "";
+  start.value = isValidTime(st) ? st : DEFAULTS.startTime;
+  end.value = isValidTime(s.endTime || "") ? s.endTime : DEFAULTS.endTime;
+
+  if (s.lastFlush) report(JSON.stringify(s.lastFlush, null, 2), !!s.lastFlush.ok);
   else report("No runs yet.");
 }
 
 $("save").addEventListener("click", async () => {
-  const redirectUrl = redir.value.trim();
-  if (!isValidRedirect(redirectUrl)) {
-    saveMsg.textContent = "Redirect URL must start with http:// or https://";
-    saveMsg.className = "err";
-    return;
-  }
-  saveMsg.className = "ok";
   const cfg = {
-    redirectUrl,
     pattern: pat.value || DEFAULTS.pattern,
     flags: flg.value || DEFAULTS.flags,
-    time: isValidTime(tim.value) ? tim.value : DEFAULTS.time
+    startTime: isValidTime(start.value) ? start.value : DEFAULTS.startTime,
+    endTime: isValidTime(end.value) ? end.value : DEFAULTS.endTime,
   };
   await chrome.storage.local.set(cfg);
+  await chrome.storage.local.remove("time"); // drop the migrated key
   // Ask background to reschedule now (background also reacts to storage change)
   try { await chrome.runtime.sendMessage({ type: "reschedule" }); } catch {}
   saveMsg.textContent = "Saved";
   setTimeout(() => (saveMsg.textContent = ""), 1200);
 });
 
-// Keep it simple: same call as popup → background → flush
 let runNowLock = false;
 $("runNow").addEventListener("click", () => {
   if (runNowLock) return;
   runNowLock = true;
-  chrome.runtime.sendMessage(
-    { type: "runNow", reloadPattern: pat.value, reloadFlags: flg.value, redirectUrl: isValidRedirect(redir.value.trim()) ? redir.value.trim() : "" },
-    (resp) => {
-      runNowLock = false;
-      if (chrome.runtime.lastError) {
-        report(`Error: ${chrome.runtime.lastError.message}`, false);
-        return;
-      }
-      const out = resp?.result || resp || {};
-      report(JSON.stringify(out, null, 2), !!out.ok);
+  chrome.runtime.sendMessage({ type: "runNow" }, (resp) => {
+    runNowLock = false;
+    if (chrome.runtime.lastError) {
+      report(`Error: ${chrome.runtime.lastError.message}`, false);
+      return;
     }
-  );
+    const out = resp?.result || resp || {};
+    report(JSON.stringify(out, null, 2), !!out.ok);
+  });
 });
 
 load();
