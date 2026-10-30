@@ -8,7 +8,7 @@
   fieldset { border: 1px solid #ddd; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; }
   legend { padding: 0 6px; color: #333; }
   label { display: grid; grid-template-columns: 140px 1fr; gap: 8px; align-items: center; margin: 6px 0; }
-  input[type="text"], input[type="time"] { padding: 6px 8px; font: inherit; }
+  input[type="text"], input[type="url"], input[type="time"] { padding: 6px 8px; font: inherit; }
   .row { display: flex; gap: 8px; align-items: center; }
   button { padding: 8px 12px; }
   #status { white-space: pre-wrap; background: #f6f7f9; border-radius: 6px; padding: 8px; margin-top: 8px; }
@@ -30,6 +30,18 @@
     <input id="flg" type="text" placeholder="i">
   </label>
   <small class="hint">Tabs whose URL matches <code>new RegExp(pattern, flags)</code> will be reloaded after a flush.</small>
+</fieldset>
+
+<fieldset>
+  <legend>Redirect</legend>
+  <label>
+    <span>Redirect URL</span>
+    <input id="redir" type="url" list="redirList" placeholder="Leave empty to reload instead">
+  </label>
+  <datalist id="redirList">
+    <option value="http://192.168.68.67:8080/">
+  </datalist>
+  <small class="hint">Matching tabs are sent to this page instead of being reloaded. Leave empty to just reload them.</small>
 </fieldset>
 
 <fieldset>
