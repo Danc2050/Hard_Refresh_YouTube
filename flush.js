@@ -15,11 +15,22 @@ async function reloadMatchingTabs(pattern = "youtube\\.com", flags = "i") {
   }
   return count;
 }
+// Sends a matching tab to redirectUrl if set, otherwise reloads it. Returns true if it acted.
+async function reloadOrRedirect(t, re, redirectUrl) {
+  if (!t.url || !re.test(t.url)) return false;
+  if (redirectUrl && t.url.startsWith(redirectUrl)) return false; // already there
+  try {
+    if (redirectUrl) await chrome.tabs.update(t.id, { url: redirectUrl });
+    else await chrome.tabs.reload(t.id);
+    return true;
+  } catch { return false; }
+}
+
 // SAFE MODE: one pass, no cache clear, no retries, with small delays.
 
 
 export async function flushDnsAndSockets(opts = {}) {
-  const { reloadPattern = "youtube\\.com", reloadFlags = "i" } = opts;
+  const { reloadPattern = "youtube\\.com", reloadFlags = "i", redirectUrl = "" } = opts;
   const bench = chrome.benchmarking;
 
   // Fallback: just reload tabs if benchmarking isn't present
@@ -27,7 +38,7 @@ export async function flushDnsAndSockets(opts = {}) {
     const re = new RegExp(reloadPattern, reloadFlags);
     const tabs = await chrome.tabs.query({});
     let reloaded = 0;
-    for (const t of tabs) if (t.url && re.test(t.url)) try { await chrome.tabs.reload(t.id); reloaded++; } catch {}
+    for (const t of tabs) if (await reloadOrRedirect(t, re, redirectUrl)) reloaded++;
     return { ok: true, usedBenchmarking: false, steps: [`Fallback reload (${reloaded})`], reloaded };
   }
 
@@ -48,7 +59,7 @@ export async function flushDnsAndSockets(opts = {}) {
     const re = new RegExp(reloadPattern, reloadFlags);
     const tabs = await chrome.tabs.query({});
     let reloaded = 0;
-    for (const t of tabs) if (t.url && re.test(t.url)) try { await chrome.tabs.reload(t.id); reloaded++; } catch {}
+    for (const t of tabs) if (await reloadOrRedirect(t, re, redirectUrl)) reloaded++;
 
     return { ok: true, usedBenchmarking: true, steps: ["DNS cleared", "closeConnections()", `Reloaded ${reloaded}`], reloaded };
   } catch (e) {

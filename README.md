@@ -17,6 +17,7 @@ This extension is designed to maintain fresh network connections and reload spec
 - **DNS Flush**: Clears Chrome's DNS resolver cache
 - **Socket Management**: Closes all open network connections
 - **Smart Tab Reload**: Reloads only tabs matching a customizable regex pattern
+- **Redirect**: Optionally sends matching tabs to a URL (e.g. a bedtime page) instead of reloading them
 - **Scheduled Execution**: Runs automatically at a configured time (e.g., midnight)
 - **Manual Trigger**: Click the toolbar icon or use the popup/options page to run immediately
 
@@ -24,6 +25,7 @@ This extension is designed to maintain fresh network connections and reload spec
 - **Regex Pattern**: Define which tabs to reload (e.g., `youtube\.com`)
 - **Regex Flags**: Customize matching behavior (e.g., `i` for case-insensitive)
 - **Schedule Time**: Set when the daily flush should occur (default: 00:00)
+- **Redirect URL**: Where matching tabs are sent (default: `http://192.168.68.67:8080/`). Leave empty to reload instead
 
 ## Requirements
 
@@ -64,7 +66,8 @@ The extension requires the following permissions:
 2. Configure your regex pattern (e.g., `youtube\.com` to match YouTube tabs)
 3. Set regex flags (typically `i` for case-insensitive matching)
 4. Choose the daily run time (24-hour format, e.g., 00:00 for midnight)
-5. Click "Save"
+5. Set the redirect URL, or clear it to just reload matching tabs
+6. Click "Save"
 
 ### Manual Execution
 - **Toolbar Click**: Click the extension icon to run immediately
@@ -99,6 +102,7 @@ The offscreen document pattern prevents the service worker from crashing when us
 - **Time**: 00:00 (midnight)
 - **Pattern**: `youtube\.com`
 - **Flags**: `i` (case-insensitive)
+- **Redirect URL**: `http://192.168.68.67:8080/`
 
 ## Limitations
 
@@ -125,7 +129,7 @@ The offscreen document pattern prevents the service worker from crashing when us
 
 ## Version
 
-Current version: 1.0.0
+Current version: 1.1.0
 
 ## License
 

@@ -1,8 +1,8 @@
 {
     "manifest_version": 3,
     "name": "Tab Refresher (Regex + Schedule)",
-    "version": "1.0.0",
-    "description": "Reload tabs whose URL matches a regex on a daily schedule (e.g., midnight).",
+    "version": "1.1.0",
+    "description": "Reload (or redirect) tabs whose URL matches a regex on a daily schedule (e.g., midnight).",
     "permissions": ["tabs", "storage", "browsingData", "alarms", "offscreen"],
     "host_permissions": ["<all_urls>"],
     "options_ui": {

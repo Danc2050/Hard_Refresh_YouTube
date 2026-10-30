@@ -3,7 +3,7 @@
 // Requires permissions: ["storage","browsingData","alarms","tabs","offscreen"]
 
 // ---------- Config ----------
-const DEFAULTS = { time: "00:00", pattern: "youtube\\.com", flags: "i" };
+const DEFAULTS = { time: "00:00", pattern: "youtube\\.com", flags: "i", redirectUrl: "http://192.168.68.67:8080/" };
 const ALARM = "scheduledFlush";
 const OFFSCREEN_URL = "offscreen.html"; // bundled with your extension
 
@@ -19,6 +19,7 @@ async function getCfg() {
     time: s.time || DEFAULTS.time,
     pattern: s.pattern || DEFAULTS.pattern,
     flags: s.flags || DEFAULTS.flags,
+    redirectUrl: s.redirectUrl ?? DEFAULTS.redirectUrl, // "" = reload instead of redirect
   };
 }
 
@@ -37,16 +38,21 @@ async function schedule() {
   chrome.alarms.create(ALARM, { when: nextAt(time) });
 }
 
-async function reloadMatchingTabs(pattern, flags) {
+// Sends matching tabs to redirectUrl if set, otherwise reloads them in place.
+async function reloadMatchingTabs(pattern, flags, redirectUrl) {
   let re;
   try { re = new RegExp(pattern, flags); }
   catch { re = /youtube\.com/i; }
   const tabs = await chrome.tabs.query({});
   let n = 0;
   for (const t of tabs) {
-    if (t.url && re.test(t.url)) {
-      try { await chrome.tabs.reload(t.id); n++; } catch {}
-    }
+    if (!t.url || !re.test(t.url)) continue;
+    if (redirectUrl && t.url.startsWith(redirectUrl)) continue; // already there
+    try {
+      if (redirectUrl) await chrome.tabs.update(t.id, { url: redirectUrl });
+      else await chrome.tabs.reload(t.id);
+      n++;
+    } catch {}
   }
   return n;
 }
@@ -78,22 +84,22 @@ async function runFlushViaOffscreen() {
 }
 
 // ---------- Orchestrator (single entry point) ----------
-async function flushAndReload(pattern, flags) {
+async function flushAndReload(pattern, flags, redirectUrl) {
   if (inflight) return inflight; // coalesce concurrent calls
 
   inflight = (async () => {
     // 1) Do the benchmarking-only flush in offscreen (may be no-op if flag missing)
     const benchRes = await runFlushViaOffscreen();
 
-    // 2) Give Chrome a breath, then reload matching tabs here
+    // 2) Give Chrome a breath, then reload (or redirect) matching tabs here
     await sleep(150);
-    const reloaded = await reloadMatchingTabs(pattern, flags);
+    const reloaded = await reloadMatchingTabs(pattern, flags, redirectUrl);
 
     const combined = {
       ...benchRes,
       ok: benchRes?.ok !== false,
       reloaded,
-      steps: [...(benchRes?.steps || []), `Reloaded ${reloaded} tab(s)`],
+      steps: [...(benchRes?.steps || []), redirectUrl ? `Redirected ${reloaded} tab(s) to ${redirectUrl}` : `Reloaded ${reloaded} tab(s)`],
       at: new Date().toISOString(),
     };
 
@@ -127,15 +133,15 @@ chrome.storage.onChanged.addListener((chg, area) => {
 // Alarm fires: run flush + reload, then reschedule next day
 chrome.alarms.onAlarm.addListener(async (a) => {
   if (a.name !== ALARM) return;
-  const { pattern, flags } = await getCfg();
-  await flushAndReload(pattern, flags);
+  const { pattern, flags, redirectUrl } = await getCfg();
+  await flushAndReload(pattern, flags, redirectUrl);
   await schedule();
 });
 
 // Toolbar click → same path
 chrome.action.onClicked.addListener(async () => {
-  const { pattern, flags } = await getCfg();
-  const res = await flushAndReload(pattern, flags);
+  const { pattern, flags, redirectUrl } = await getCfg();
+  const res = await flushAndReload(pattern, flags, redirectUrl);
   try {
     await chrome.action.setBadgeBackgroundColor({ color: res.ok ? [0,120,215,255] : [200,0,0,255] });
     await chrome.action.setBadgeText({ text: res.ok ? "OK" : "ERR" });
@@ -149,7 +155,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     // Uses the SAME route as popup: background → offscreen → reload tabs
     const p = msg.reloadPattern ?? DEFAULTS.pattern;
     const f = msg.reloadFlags ?? DEFAULTS.flags;
-    flushAndReload(p, f).then((r) => sendResponse({ ok: true, result: r }));
+    const u = msg.redirectUrl ?? DEFAULTS.redirectUrl;
+    flushAndReload(p, f, u).then((r) => sendResponse({ ok: true, result: r }));
     return true; // keep channel open for async response
   }
   if (msg?.type === "reschedule") {
