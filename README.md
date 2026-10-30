@@ -17,13 +17,15 @@ than by browser policy (which refreshes too slowly to hit a precise bedtime).
 ## How it works
 
 At the start of the window the extension enables a `declarativeNetRequest`
-ruleset covering `youtube.com`, `youtu.be`, `youtube-nocookie.com`,
+ruleset. YouTube pages (`youtube.com`, `youtu.be`) are redirected to the bedtime
+page hardcoded in `rules.json`, `http://192.168.68.67:8080/`. Everything else is
+blocked, covering `youtube.com`, `youtu.be`, `youtube-nocookie.com`,
 `googlevideo.com`, and `youtubei.googleapis.com`. Blocking `googlevideo.com` as a
 `media`/`xmlhttprequest` resource is what actually stops playback — that is the
 video CDN, and it is the piece Chrome's `URLBlocklist` policy cannot reach.
 
-It then reloads tabs matching your regex, which lands them on Chrome's block page
-and discards anything already buffered. No other tabs are touched.
+It then reloads tabs matching your regex, which sends YouTube tabs to the bedtime
+page and discards anything already buffered. No other tabs are touched.
 
 At the end of the window the ruleset is disabled and no tabs are disturbed.
 
@@ -34,6 +36,9 @@ At the end of the window the ruleset is disabled and no tabs are disturbed.
   the transition into the window
 - **Self-healing**: a 5-minute reconcile alarm fixes the state if the machine was
   asleep across a boundary or an alarm was missed
+- **Bedtime page**: YouTube pages redirect to a page on the home network instead of
+  Chrome's block page. If that page is unreachable, Chrome shows its "can't be
+  reached" page instead; YouTube stays blocked either way
 - **Manual trigger**: the popup and options page force the block on for testing
 
 ## Configuration
@@ -42,6 +47,10 @@ Open the extension's options page:
 
 - **Regex pattern** / **flags** — which tabs get reloaded, e.g. `youtube\.com`, `i`
 - **Block from** / **until** — the nightly window, e.g. `22:00` to `06:00`
+
+The bedtime page URL is not an option: it is hardcoded in `rules.json` so the
+extension works with no setup after install. To change it, edit the `redirect`
+rule's `url` there and publish a new version.
 
 ## Requirements
 
@@ -55,6 +64,7 @@ closing, which is no longer used.
 - `tabs` — find and reload tabs matching the pattern
 - `storage` — save configuration
 - `alarms` — schedule the window boundaries
+- Host access to `youtube.com` and `youtu.be` — required for the redirect rule
 
 ## Installation
 

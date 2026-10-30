@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "YouTube Night Block (Schedule + Regex)",
-  "version": "2.0.0",
-  "description": "Blocks YouTube during a nightly window and reloads only the matching tabs.",
+  "version": "2.1.0",
+  "description": "Blocks YouTube during a nightly window and sends YouTube pages to a bedtime page.",
   "permissions": ["tabs", "storage", "alarms", "declarativeNetRequest"],
+  "host_permissions": ["*://*.youtube.com/*", "*://youtu.be/*"],
   "declarative_net_request": {
     "rule_resources": [
       {

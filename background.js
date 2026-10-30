@@ -97,8 +97,8 @@ async function enforce({ force = false } = {}) {
     const changed = await setBlocking(shouldBlock);
 
     // Only disturb tabs on the transition into the window (or a manual run).
-    // Reloading a YouTube tab while the ruleset is live lands it on Chrome's
-    // block page, which discards whatever was already buffered. Without this
+    // Reloading a YouTube tab while the ruleset is live redirects it to the
+    // bedtime page (see rules.json), which discards whatever was already buffered. Without this
     // the tab would keep playing until the buffer drained.
     let reloaded = 0;
     if (shouldBlock && (changed || force)) {
