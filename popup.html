@@ -1,15 +1,15 @@
 <!doctype html>
 <meta charset="utf-8" />
-<title>Flush DNS & Sockets</title>
+<title>YouTube Night Block</title>
 <style>
   body { font: 13px system-ui, -apple-system, Segoe UI, Arial; margin: 12px; width: 360px; }
-  #information { padding: 8px; background: #f6f7f9; border-radius: 6px; }
+  #information { padding: 8px; background: #f6f7f9; border-radius: 6px; white-space: pre-wrap; }
   button { padding: 8px 12px; }
   .ok { color: #0a7; }
   .err { color: #c00; }
 </style>
-<h3>Flush DNS & Close Sockets</h3>
-<p>Requires Chrome/Edge launched with <code>--enable-net-benchmarking</code>.</p>
+<h3>YouTube Night Block</h3>
+<p>Forces the block on now so you can test it. Outside the scheduled window it reverts within about 5 minutes.</p>
 <p id="information">Ready.</p>
-<button id="run">Flush now</button>
+<button id="run">Block now</button>
 <script type="module" src="popup.js"></script>

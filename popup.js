@@ -1,9 +1,8 @@
-import { flushDnsAndSockets } from "./flush.js";
+// Popup now uses the same background route as the options page.
+// (flush.js is gone; blocking lives in declarativeNetRequest.)
 
 const info = document.getElementById("information");
 const runBtn = document.getElementById("run");
-
-const DEFAULTS = { pattern: "youtube\\.com", flags: "i", redirectUrl: "http://192.168.68.67:8080/" };
 
 function render(message, ok, widthEm = 28) {
   info.textContent = message;
@@ -11,18 +10,22 @@ function render(message, ok, widthEm = 28) {
   info.className = ok ? "ok" : "err";
 }
 
-runBtn.addEventListener("click", async () => {
+runBtn.addEventListener("click", () => {
   render("Running…", true);
-  const { pattern, flags, redirectUrl } = await chrome.storage.local.get(DEFAULTS);
-  const res = await flushDnsAndSockets({ reloadPattern: pattern || DEFAULTS.pattern, reloadFlags: flags || DEFAULTS.flags, redirectUrl });
-  if (res.ok) {
+  chrome.runtime.sendMessage({ type: "runNow" }, (resp) => {
+    if (chrome.runtime.lastError) {
+      render(chrome.runtime.lastError.message, false, 36);
+      return;
+    }
+    const res = resp?.result;
+    if (!res?.ok) {
+      render(res?.error || "Failed.", false, 36);
+      return;
+    }
     render(
-      `DNS resolver cache flushed and sockets closed.\n` +
-      `• ${res.steps.join("\n• ")}\n` +
-      `• ${redirectUrl ? `Redirected to ${redirectUrl}` : "Reloaded"}: ${res.reloaded} tab(s)`,
+      `YouTube blocked (window ${res.window}).\n` +
+      `• ${res.steps.join("\n• ")}`,
       true, 36
     );
-  } else {
-    render(res.error || "Failed to flush.", false, 36);
-  }
+  });
 });

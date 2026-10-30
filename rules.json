@@ -1,0 +1,43 @@
+[
+  {
+    "id": 2,
+    "priority": 2,
+    "action": {
+      "type": "redirect",
+      "redirect": { "url": "http://192.168.68.67:8080/" }
+    },
+    "condition": {
+      "requestDomains": ["youtube.com", "youtu.be"],
+      "resourceTypes": ["main_frame"]
+    }
+  },
+  {
+    "id": 1,
+    "priority": 1,
+    "action": { "type": "block" },
+    "condition": {
+      "requestDomains": [
+        "youtube.com",
+        "youtu.be",
+        "youtube-nocookie.com",
+        "googlevideo.com",
+        "youtubei.googleapis.com"
+      ],
+      "resourceTypes": [
+        "main_frame",
+        "sub_frame",
+        "stylesheet",
+        "script",
+        "image",
+        "font",
+        "object",
+        "xmlhttprequest",
+        "ping",
+        "csp_report",
+        "media",
+        "websocket",
+        "other"
+      ]
+    }
+  }
+]
